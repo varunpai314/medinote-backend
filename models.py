@@ -20,7 +20,7 @@ class Patient(Base):
     doctor_id = Column(UUID(as_uuid=True), ForeignKey("doctor.id", ondelete="CASCADE"), nullable=False)
     name = Column(String(100), nullable=False)
     email = Column(String(100), nullable=False)
-    pronouns = Column(String(20))
+    pronouns = Column(String(20), nullable=False)
     background = Column(Text)
     medical_history = Column(Text)
     family_history = Column(Text)
