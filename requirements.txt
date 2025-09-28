@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+sqlalchemy[asyncio]
+asyncpg
+passlib[bcrypt]
+python-jose
+python-dotenv
+google-cloud-storage
+supabase
+psycopg2-binary
