@@ -18,8 +18,9 @@ class Patient(Base):
     doctor_id = Column(UUID(as_uuid=True), ForeignKey("doctor.id", ondelete="CASCADE"), nullable=False)
     name = Column(String(100), nullable=False)
     email = Column(String(100), nullable=False)
-    date_of_birth = Column(Date, nullable=True)  # Made optional to match frontend
-    gender = Column(String(20), nullable=False)   # Required as per frontend
+    # TODO: Add these columns after running migration_add_dob_gender.sql
+    # date_of_birth = Column('dob', Date, nullable=True)
+    # gender = Column(String(20), nullable=True)
     pronouns = Column(String(20))                 # Optional as per frontend
     background = Column(Text)
     medical_history = Column(Text)

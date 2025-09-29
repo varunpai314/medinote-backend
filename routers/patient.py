@@ -26,8 +26,9 @@ async def add_patient_ext(
             doctor_id=patient.doctor_id,
             name=patient.name,
             email=patient.email,
-            date_of_birth=patient.date_of_birth,  # Now properly handled
-            gender=patient.gender,                # Now properly handled
+            # TODO: Add these fields after running migration_add_dob_gender.sql
+            # date_of_birth=patient.date_of_birth,
+            # gender=patient.gender,
             pronouns=patient.pronouns,
             background=patient.background,
             medical_history=patient.medical_history,
@@ -43,8 +44,9 @@ async def add_patient_ext(
             "name": new_patient.name,
             "email": new_patient.email,
             "doctor_id": str(new_patient.doctor_id),
-            "date_of_birth": new_patient.date_of_birth.isoformat() if new_patient.date_of_birth else None,
-            "gender": new_patient.gender,
+            # TODO: Add these fields after running migration_add_dob_gender.sql
+            # "date_of_birth": new_patient.date_of_birth.isoformat() if new_patient.date_of_birth else None,
+            # "gender": new_patient.gender,
             "pronouns": new_patient.pronouns,
             "background": new_patient.background,
             "medical_history": new_patient.medical_history,
@@ -66,8 +68,9 @@ async def get_patients_by_doctor(doctor_id: str, token_doctor_id: str = Depends(
                 "name": patient.name,
                 "email": patient.email,
                 "doctor_id": str(patient.doctor_id),
-                "date_of_birth": patient.date_of_birth.isoformat() if patient.date_of_birth else None,
-                "gender": patient.gender,
+                # TODO: Add these fields after running migration_add_dob_gender.sql
+                # "date_of_birth": patient.date_of_birth.isoformat() if patient.date_of_birth else None,
+                # "gender": patient.gender,
                 "pronouns": patient.pronouns,
                 "background": patient.background,
                 "medical_history": patient.medical_history,
@@ -171,8 +174,9 @@ async def get_all_sessions(userId: str, token_doctor_id: str = Depends(get_curre
                 "patient_name": p.name,
                 "pronouns": p.pronouns,
                 "email": p.email,
-                "gender": p.gender,
-                "date_of_birth": p.date_of_birth.isoformat() if p.date_of_birth else None,
+                # TODO: Add these fields after running migration_add_dob_gender.sql
+                # "gender": p.gender,
+                # "date_of_birth": p.date_of_birth.isoformat() if p.date_of_birth else None,
                 "background": p.background,
                 "duration": s.duration,
                 "medical_history": p.medical_history,
@@ -186,8 +190,9 @@ async def get_all_sessions(userId: str, token_doctor_id: str = Depends(get_curre
             patient_map[str(p.id)] = {
                 "name": p.name,
                 "pronouns": p.pronouns,
-                "gender": p.gender,
-                "date_of_birth": p.date_of_birth.isoformat() if p.date_of_birth else None,
+                # TODO: Add these fields after running migration_add_dob_gender.sql
+                # "gender": p.gender,
+                # "date_of_birth": p.date_of_birth.isoformat() if p.date_of_birth else None,
                 "email": p.email
             }
         return {"sessions": sessions, "patientMap": patient_map}

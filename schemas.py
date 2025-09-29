@@ -22,8 +22,9 @@ class PatientCreate(BaseModel):
     doctor_id: uuid.UUID
     name: str
     email: EmailStr
-    date_of_birth: Optional[datetime.date] = None  # Made optional and renamed to match frontend
-    gender: str                                    # Required as per frontend
+    # TODO: Add these fields after running migration_add_dob_gender.sql
+    # date_of_birth: Optional[datetime.date] = None
+    # gender: str
     pronouns: Optional[str] = None                 # Optional as per frontend
     background: Optional[str] = None
     medical_history: Optional[str] = None
