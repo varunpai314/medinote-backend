@@ -1,7 +1,6 @@
 from typing import List
 from routers.doctor import router as doctor_router
 from routers.patient import router as patient_router
-from routers.session import router as session_router
 from routers.cloud import router as cloud_router
 from routers.audio import router as audio_router
 from fastapi import FastAPI
@@ -27,7 +26,6 @@ async def on_startup():
 
 app.include_router(doctor_router)
 app.include_router(patient_router)
-app.include_router(session_router)
 app.include_router(cloud_router)
 app.include_router(audio_router)
 
