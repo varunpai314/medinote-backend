@@ -1,306 +1,171 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy.orm import selectinload
-from typing import List
-import uuid
-from datetime import datetime
-
+from fastapi import APIRouter, Depends, HTTPException, Body
+from sqlalchemy.ext.asyncio import AsyncSession
 from database import AsyncSessionLocal
-from models import Session, Doctor, Patient
-from schemas import SessionCreate, SessionUpdate, SessionResponse
-from routers.utils import get_current_doctor
+from models import Session, Patient, Template
+from utils import get_current_doctor
+import uuid
 
-router = APIRouter(prefix="/sessions", tags=["sessions"])
 
-@router.post("/", response_model=SessionResponse, status_code=status.HTTP_201_CREATED)
-async def create_session(
-    session_data: SessionCreate,
-    doctor_id: str = Depends(get_current_doctor)
-):
-    """Create a new session"""
-    async with AsyncSessionLocal() as db:
-        try:
-            # Verify the doctor owns the patient
-            patient_result = await db.execute(
-                select(Patient).where(
-                    Patient.id == session_data.patient_id,
-                    Patient.doctor_id == uuid.UUID(doctor_id)
-                )
-            )
-            patient = patient_result.scalar_one_or_none()
-            
-            if not patient:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Patient not found or not accessible"
-                )
+router = APIRouter(prefix="/session", tags=["Session"])
 
-            # Create session
-            new_session = Session(
-                id=uuid.uuid4(),
-                doctor_id=uuid.UUID(doctor_id),
-                patient_id=session_data.patient_id,
-                template_id=session_data.template_id,
-                session_title=session_data.session_title,
-                status=session_data.status or "created",
-                date=session_data.date or datetime.now().strftime("%Y-%m-%d"),
-                start_time=session_data.start_time
-            )
 
-            db.add(new_session)
-            await db.commit()
-            await db.refresh(new_session)
-
-            return SessionResponse(
-                id=str(new_session.id),
-                doctor_id=str(new_session.doctor_id),
-                patient_id=str(new_session.patient_id),
-                template_id=str(new_session.template_id) if new_session.template_id else None,
-                session_title=new_session.session_title,
-                session_summary=new_session.session_summary,
-                transcript_status=new_session.transcript_status,
-                transcript=new_session.transcript,
-                status=new_session.status,
-                date=new_session.date,
-                start_time=new_session.start_time,
-                end_time=new_session.end_time,
-                duration=new_session.duration
-            )
-
-        except Exception as e:
-            await db.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to create session: {str(e)}"
-            )
-
-@router.get("/doctor/{doctor_id}", response_model=List[SessionResponse])
-async def get_doctor_sessions(
-    doctor_id: uuid.UUID,
-    current_doctor_id: str = Depends(get_current_doctor)
-):
-    """Get all sessions for a doctor"""
-    # Verify the doctor is requesting their own sessions
-    if str(doctor_id) != current_doctor_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to access these sessions"
+# GET /fetch-session-by-patient/{patient_id}
+@router.get("/fetch-session-by-patient/{patient_id}")
+async def fetch_sessions_by_patient(patient_id: str, doctor_id: str = Depends(get_current_doctor)):
+    """
+    Returns all sessions for a given patientId, only for the authenticated doctor.
+    """
+    from sqlalchemy.future import select
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(Session).where(Session.patient_id == patient_id, Session.doctor_id == doctor_id)
         )
+        sessions = [
+            {
+                "id": str(s.id),
+                "date": s.date,
+                "session_title": s.session_title,
+                "session_summary": s.session_summary,
+                "duration": s.duration
+            }
+            for s in result.scalars()
+        ]
+        return {"sessions": sessions}
 
-    async with AsyncSessionLocal() as db:
-        try:
-            result = await db.execute(
-                select(Session).where(Session.doctor_id == doctor_id)
+
+# GET /all-session?userId={userId}
+
+@router.get("/all-session")
+async def get_all_sessions(userId: str, token_doctor_id: str = Depends(get_current_doctor)):
+    """
+    Returns all sessions for a given doctor (userId), with patient details and patientMap.
+    """
+    if userId != token_doctor_id:
+        raise HTTPException(status_code=403, detail="Doctor ID mismatch or unauthorized")
+    from sqlalchemy.future import select
+    from sqlalchemy.orm import joinedload
+    async with AsyncSessionLocal() as session:
+        # Join Session and Patient
+        result = await session.execute(
+            select(Session, Patient)
+            .join(Patient, Session.patient_id == Patient.id)
+            .where(Session.doctor_id == userId)
+        )
+        sessions = []
+        patient_map = {}
+        for s, p in result.all():
+            session_obj = {
+                "id": str(s.id),
+                "user_id": str(s.doctor_id),
+                "patient_id": str(p.id),
+                "session_title": s.session_title,
+                "session_summary": s.session_summary,
+                "transcript_status": s.transcript_status,
+                "transcript": s.transcript,
+                "status": s.status,
+                "date": s.date,
+                "start_time": s.start_time,
+                "end_time": s.end_time,
+                "patient_name": p.name,
+                "pronouns": p.pronouns,
+                "email": p.email,
+                # TODO: Add these fields after running migration_add_dob_gender.sql
+                # "gender": p.gender,
+                # "date_of_birth": p.date_of_birth.isoformat() if p.date_of_birth else None,
+                "background": p.background,
+                "duration": s.duration,
+                "medical_history": p.medical_history,
+                "family_history": p.family_history,
+                "social_history": p.social_history,
+                "previous_treatment": p.previous_treatment,
+                "patient_pronouns": p.pronouns,
+                "clinical_notes": []  # Placeholder for future notes
+            }
+            sessions.append(session_obj)
+            patient_map[str(p.id)] = {
+                "name": p.name,
+                "pronouns": p.pronouns,
+                # TODO: Add these fields after running migration_add_dob_gender.sql
+                # "gender": p.gender,
+                # "date_of_birth": p.date_of_birth.isoformat() if p.date_of_birth else None,
+                "email": p.email
+            }
+        return {"sessions": sessions, "patientMap": patient_map}
+    
+# GET /fetch-default-template-ext?userId={userId}
+@router.get("/fetch-default-template-ext")
+async def fetch_templates_by_user(userId: str, token_doctor_id: str = Depends(get_current_doctor)):
+    """
+    Returns all templates for a doctor (userId): both doctor-specific and global default templates.
+    """
+    if userId != token_doctor_id:
+        raise HTTPException(status_code=403, detail="Doctor ID mismatch or unauthorized")
+    from sqlalchemy.future import select
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(Template).where(
+                (Template.doctor_id == userId) | (Template.type == 'default')
             )
-            sessions = result.scalars().all()
-
-            return [
-                SessionResponse(
-                    id=str(session.id),
-                    doctor_id=str(session.doctor_id),
-                    patient_id=str(session.patient_id),
-                    template_id=str(session.template_id) if session.template_id else None,
-                    session_title=session.session_title,
-                    session_summary=session.session_summary,
-                    transcript_status=session.transcript_status,
-                    transcript=session.transcript,
-                    status=session.status,
-                    date=session.date,
-                    start_time=session.start_time,
-                    end_time=session.end_time,
-                    duration=session.duration
-                )
-                for session in sessions
-            ]
-
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to get sessions: {str(e)}"
-            )
-
-@router.get("/patient/{patient_id}", response_model=List[SessionResponse])
-async def get_patient_sessions(
-    patient_id: uuid.UUID,
-    doctor_id: str = Depends(get_current_doctor)
+        )
+        templates = [
+            {
+                "id": str(t.id),
+                "doctor_id": str(t.doctor_id) if t.doctor_id else None,
+                "title": t.title,
+                "type": t.type
+            }
+            for t in result.scalars()
+        ]
+        return {"templates": templates}
+    
+# POST /upload-session
+@router.post("/upload-session")
+async def upload_session(
+    payload: dict = Body(...),
+    token_doctor_id: str = Depends(get_current_doctor)
 ):
-    """Get all sessions for a patient"""
-    async with AsyncSessionLocal() as db:
-        try:
-            # Verify the doctor owns the patient
-            patient_result = await db.execute(
-                select(Patient).where(
-                    Patient.id == patient_id,
-                    Patient.doctor_id == uuid.UUID(doctor_id)
-                )
-            )
-            patient = patient_result.scalar_one_or_none()
-            
-            if not patient:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Patient not found or not accessible"
-                )
+    """
+    Create a new session for a patient and doctor.
+    """
+    # Extract and validate fields
+    patient_id = payload.get("patientId")
+    doctor_id = payload.get("userId")
+    patient_name = payload.get("patientName")  # Not stored in session, for display only
+    status = payload.get("status")
+    start_time = payload.get("startTime")
+    template_id = payload.get("templateId")
 
-            result = await db.execute(
-                select(Session).where(Session.patient_id == patient_id)
-            )
-            sessions = result.scalars().all()
+    # Validate required fields
+    if not all([patient_id, doctor_id, status, start_time, template_id]):
+        raise HTTPException(status_code=400, detail="Missing required fields.")
+    if doctor_id != token_doctor_id:
+        raise HTTPException(status_code=403, detail="Doctor ID mismatch or unauthorized")
 
-            return [
-                SessionResponse(
-                    id=str(session.id),
-                    doctor_id=str(session.doctor_id),
-                    patient_id=str(session.patient_id),
-                    template_id=str(session.template_id) if session.template_id else None,
-                    session_title=session.session_title,
-                    session_summary=session.session_summary,
-                    transcript_status=session.transcript_status,
-                    transcript=session.transcript,
-                    status=session.status,
-                    date=session.date,
-                    start_time=session.start_time,
-                    end_time=session.end_time,
-                    duration=session.duration
-                )
-                for session in sessions
-            ]
+    # Validate status
+    if status not in ("recording", "completed", "failed"):
+        raise HTTPException(status_code=400, detail="Invalid status value.")
 
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to get patient sessions: {str(e)}"
-            )
+    # Create session
 
-@router.get("/{session_id}", response_model=SessionResponse)
-async def get_session(
-    session_id: uuid.UUID,
-    doctor_id: str = Depends(get_current_doctor)
-):
-    """Get a specific session by ID"""
-    async with AsyncSessionLocal() as db:
-        try:
-            result = await db.execute(
-                select(Session).where(
-                    Session.id == session_id,
-                    Session.doctor_id == uuid.UUID(doctor_id)
-                )
-            )
-            session = result.scalar_one_or_none()
-
-            if not session:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Session not found"
-                )
-
-            return SessionResponse(
-                id=str(session.id),
-                doctor_id=str(session.doctor_id),
-                patient_id=str(session.patient_id),
-                template_id=str(session.template_id) if session.template_id else None,
-                session_title=session.session_title,
-                session_summary=session.session_summary,
-                transcript_status=session.transcript_status,
-                transcript=session.transcript,
-                status=session.status,
-                date=session.date,
-                start_time=session.start_time,
-                end_time=session.end_time,
-                duration=session.duration
-            )
-
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to get session: {str(e)}"
-            )
-
-@router.put("/{session_id}", response_model=SessionResponse)
-async def update_session(
-    session_id: uuid.UUID,
-    session_data: SessionUpdate,
-    doctor_id: str = Depends(get_current_doctor)
-):
-    """Update a session"""
-    async with AsyncSessionLocal() as db:
-        try:
-            result = await db.execute(
-                select(Session).where(
-                    Session.id == session_id,
-                    Session.doctor_id == uuid.UUID(doctor_id)
-                )
-            )
-            session = result.scalar_one_or_none()
-
-            if not session:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Session not found"
-                )
-
-            # Update only provided fields
-            update_data = session_data.dict(exclude_unset=True)
-            for field, value in update_data.items():
-                setattr(session, field, value)
-
-            await db.commit()
-            await db.refresh(session)
-
-            return SessionResponse(
-                id=str(session.id),
-                doctor_id=str(session.doctor_id),
-                patient_id=str(session.patient_id),
-                template_id=str(session.template_id) if session.template_id else None,
-                session_title=session.session_title,
-                session_summary=session.session_summary,
-                transcript_status=session.transcript_status,
-                transcript=session.transcript,
-                status=session.status,
-                date=session.date,
-                start_time=session.start_time,
-                end_time=session.end_time,
-                duration=session.duration
-            )
-
-        except Exception as e:
-            await db.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to update session: {str(e)}"
-            )
-
-@router.delete("/{session_id}", status_code=status.HTTP_200_OK)
-async def delete_session(
-    session_id: uuid.UUID,
-    doctor_id: str = Depends(get_current_doctor)
-):
-    """Delete a session"""
-    async with AsyncSessionLocal() as db:
-        try:
-            result = await db.execute(
-                select(Session).where(
-                    Session.id == session_id,
-                    Session.doctor_id == uuid.UUID(doctor_id)
-                )
-            )
-            session = result.scalar_one_or_none()
-
-            if not session:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Session not found"
-                )
-
-            await db.delete(session)
-            await db.commit()
-
-            return {"message": "Session deleted successfully"}
-
-        except Exception as e:
-            await db.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to delete session: {str(e)}"
-            )
+    async with AsyncSessionLocal() as session:
+        new_session = Session(
+            id=uuid.uuid4(),
+            doctor_id=doctor_id,
+            patient_id=patient_id,
+            template_id=template_id,
+            status=status,
+            start_time=start_time,
+            # Optional fields
+            session_title=None,
+            session_summary=None,
+            transcript_status=None,
+            transcript=None,
+            date=None,
+            end_time=None,
+            duration=None
+        )
+        session.add(new_session)
+        await session.commit()
+        await session.refresh(new_session)
+        return {"id": str(new_session.id)}
