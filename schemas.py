@@ -1,3 +1,4 @@
+import datetime
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 import uuid
@@ -20,7 +21,23 @@ class TokenResponse(BaseModel):
 class PatientCreate(BaseModel):
     doctor_id: uuid.UUID
     name: str
-    email: Optional[EmailStr] = None
+    email: EmailStr
+    date_of_birth: Optional[datetime.date] = None  # Made optional and renamed to match frontend
+    gender: str                                    # Required as per frontend
+    pronouns: Optional[str] = None                 # Optional as per frontend
+    background: Optional[str] = None
+    medical_history: Optional[str] = None
+    family_history: Optional[str] = None
+    social_history: Optional[str] = None
+    previous_treatment: Optional[str] = None
+
+class PatientResponse(BaseModel):
+    id: str
+    doctor_id: str
+    name: str
+    email: str
+    date_of_birth: Optional[str] = None  # ISO date string
+    gender: str
     pronouns: Optional[str] = None
     background: Optional[str] = None
     medical_history: Optional[str] = None

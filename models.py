@@ -1,3 +1,4 @@
+from datetime import date
 from sqlalchemy import Column, String, Text, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
@@ -20,7 +21,9 @@ class Patient(Base):
     doctor_id = Column(UUID(as_uuid=True), ForeignKey("doctor.id", ondelete="CASCADE"), nullable=False)
     name = Column(String(100), nullable=False)
     email = Column(String(100), nullable=False)
-    pronouns = Column(String(20), nullable=False)
+    date_of_birth = Column(date, nullable=True)  # Made optional to match frontend
+    gender = Column(String(20), nullable=False)   # Required as per frontend
+    pronouns = Column(String(20))                 # Optional as per frontend
     background = Column(Text)
     medical_history = Column(Text)
     family_history = Column(Text)
