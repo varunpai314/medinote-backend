@@ -1,5 +1,4 @@
-from datetime import date
-from sqlalchemy import Column, String, Text, ForeignKey
+from sqlalchemy import Column, String, Text, ForeignKey, Date, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
 from database import Base
@@ -12,8 +11,6 @@ class Doctor(Base):
     specialization = Column(String(100))
     password_hash = Column(Text, nullable=False)
 
-from sqlalchemy import UniqueConstraint
-
 class Patient(Base):
     __tablename__ = "patient"
     __table_args__ = (UniqueConstraint('doctor_id', 'email', name='uix_doctor_email'),)
@@ -21,7 +18,7 @@ class Patient(Base):
     doctor_id = Column(UUID(as_uuid=True), ForeignKey("doctor.id", ondelete="CASCADE"), nullable=False)
     name = Column(String(100), nullable=False)
     email = Column(String(100), nullable=False)
-    date_of_birth = Column(date, nullable=True)  # Made optional to match frontend
+    date_of_birth = Column(Date, nullable=True)  # Made optional to match frontend
     gender = Column(String(20), nullable=False)   # Required as per frontend
     pronouns = Column(String(20))                 # Optional as per frontend
     background = Column(Text)
